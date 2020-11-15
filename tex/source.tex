@@ -1,0 +1,258 @@
+\documentclass[a4paper, 12pt]{ltjsarticle}
+\usepackage[top=1cm,bottom=1cm,left=2cm,right=1cm,includefoot]{geometry}
+\usepackage{listings, listings-rust}
+\lstset{
+    language = Rust,
+    breaklines = true,
+    breakindent = 8pt,
+    basicstyle = \ttfamily\small,
+    frame = TBrl,
+    framesep = 5pt,
+    numbers = left,
+    stepnumber = 1,
+    numberstyle = \tiny,
+    tabsize = 4,
+    captionpos = t
+}
+\usepackage{graphicx}
+\usepackage{multirow}
+
+\title{Tello 飛行実験ソース}
+\author{美都}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\clearpage
+
+\section {Tello本体　仕様}
+\subsection {Telloの制御}
+制御は、192.168.10.1:8889に対して、UDPでコントロールコマンドをテキストで送る。
+
+コントロールコマンド列は、次のようになる。
+\begin{description}
+    \item[制御コマンド]\mbox{}\\
+        コントローラーの制御コマンド群。レスポンスは、ok/error。
+        \begin{table}[h]
+            \hspace{3\zw}
+            \begin{tabular}{ll}
+                \hline
+                コマンド & 動作 \\
+                \hline \hline
+                command & SDK制御ON \\ \hline
+                streamon & ビデオストリーム　オン \\ \hline
+                streamoff & ビデオストリーム　オフ \\ \hline
+                emergency & 緊急停止 \\ \hline
+                mon & ミッションパッド有効 \\ \hline
+                moff & ミッションパッド無効 \\ \hline
+                mdirection \emph{x} & 
+                    \begin{minipage}{0.45\textwidth}
+                        \vspace{0.5\zh}
+                        ミッションパッドの検知モード設定
+                        \vspace{-1\zh}
+                        \begin{quote}
+                            \begin{description}
+                                \item[x=0]下方向のみ有効
+                                \item[x=1]前方のみ有効
+                                \item[x=2]下・前方の両方が有効
+                            \end{description}
+                        \end{quote}
+                        \vspace{-1\zh}
+                        x=0,1の時、ステータス取得が20Hz。\\
+                        x=2の時、ステータス取得が10Hz。
+                        \vspace{0.5\zh}
+                    \end{minipage} \\ \hline
+                ap \emph{ssid} \emph{pass} &
+                \begin{tabular}{l}
+                    TelloのWi-Fiを端末モードに切り替える \\
+                    ssidとpassには、APのssidとパスワードを指定する。\\
+                \end{tabular} \\ \hline
+                wifi \emph{ssid} \emph{pass} &
+                    Telloのssidとpassを変更する。\\ \hline
+            \end{tabular}
+        \end{table}
+    \item[離着陸]\mbox{}\\
+        離着陸を行う。レスポンスは、ok/error。
+        \begin{table}[h]
+            \hspace{3\zw}
+            \begin{tabular}{ll}
+                \hline
+                コマンド & 動作 \\ \hline \hline
+                takeoff & 離陸する。\\ \hline
+                land & 着陸する。\\ \hline
+            \end{tabular}
+        \end{table}
+        \clearpage
+    \item[単純動作コマンド]\mbox{}\\
+        移動のためのコマンド群。レスポンスは、ok/error。
+        \begin{table}[h]
+            \hspace{3\zw}
+            \begin{tabular}{ll}
+                \hline
+                コマンド & 動作 \\ \hline \hline
+                up \emph{x} & \emph{x}cm上昇する。\(20<=x<=500\)。\\ \hline
+                down \emph{x} & \emph{x}cm下降する。 \(20<=x<=500\)。 \\ \hline
+                forward \emph{x} & \emph{x}cm前進する。 \(20<=x<=500\)。 \\ \hline
+                back \emph{x} & \emph{x}cm後退する。 \(20<=x<=500\)。 \\ \hline
+                left \emph{x} & \emph{x}cm左に進む。 \(20<=x<=500\)。　\\ \hline
+                right \emph{x} & \emph{x}cm右に進む。 \(20<=x<=500\)。 \\ \hline
+                cw \emph{x} & \(x^\circ\)時計回りに旋回する。\(1<=x<=360\) \\ \hline
+                ccw \emph{x} & \(x^\circ\)半時計回りに旋回する。\(1<=x<=360\) \\ \hline
+                speed \emph{x} & 移動速度を\emph{x}(cm/s)に設定する。\(10<=x<=100\) \\ \hline
+                stop & その場でホバリングする。\\ \hline
+            \end{tabular}
+        \end{table}
+    \item[複合動作コマンド]\mbox{}\\
+        移動のためのコマンド群。レスポンスは、ok/error。\\
+        全てのコマンドで、\(|x_n|,|y_n|,|z_n|\)は、同時に20以下になってはいけない。さらに、各々の値は、
+        \begin{eqnarray}
+            0 < x_n,y_n,z_n < 500 (cm) \nonumber \\
+            10 < speed < 100 (cm/s) \nonumber
+        \end{eqnarray}
+        を満たす。
+
+        \begin{table}[h]
+            \hspace{3\zw}
+            \begin{tabular}{ll}
+                \hline
+                コマンド & 動作 \\ \hline \hline
+                flip \emph{x} &
+                \begin{minipage}{0.45\textwidth}
+                    \vspace{0.5\zh}
+                    \emph{x}で示す方向に宙返りする。
+                    \vspace{-1\zh}
+                    \begin{quote}
+                        \begin{description}
+                            \item["l"] 左
+                            \item["r"] 右
+                            \item["f"] 前方
+                            \item["b"] 後方
+                        \end{description}
+                    \end{quote}
+                    \vspace{-0.5\zh}
+                \end{minipage} \\ \hline
+                go \emph{x} \emph{y} \emph{z} \emph{speed} &
+                \begin{minipage}{0.45\textwidth}
+                    \vspace{0.5\zh}
+                    現位置を基準とし、\((x,y,z)\)へ\(speed(cm/s)\)で移動する。
+                    \vspace{0.5\zh}
+                \end{minipage} \\ \hline
+                courve \(x_1\) \(y_1\) \(z_1\) \(x_2\) \(y_2\) \(z_2\) \(speed\) &
+                \begin{minipage}{0.45\textwidth}
+                    \vspace{0.5\zh}
+                    座標\((x_1,y_1,z_1)\)を経由して、\((x_2,y_2,z_2)\)へ\(speed\)(cm/s)で移動する。
+                    移動経路の半径rは、\(0.5 < r < 10\)mとする。条件を満たさない場合、errorを返す。
+                    \vspace{0.5\zh}
+                \end{minipage} \\ \hline
+            \end{tabular}
+        \end{table}
+        \clearpage
+    \item[ミッションパッドコマンド]\mbox{}\\
+        ミッションパッド関係のコマンド群。\\
+        コマンド中\(mid_n\)は、ミッションパッドIDを意味する。書式は、"m1-m8"となる。\\
+        レスポンスは、ok/error。\\
+        全てのコマンドで、\(|x_n|,|y_n|,|z_n|\)は、同時に20以下になってはいけない。さらに、各々の値は、
+        \begin{eqnarray}
+            0 < x_n,y_n,z_n < 500 (cm) \nonumber \\
+            10 < speed < 100 (cm/s) \nonumber
+        \end{eqnarray}
+        を満たす。
+
+        \begin{table}[h]
+            \hspace{3\zw}
+            \begin{tabular}{ll}
+                \hline
+                コマンド & 動作 \\ \hline \hline
+                 go \(x\) \(y\) \(z\) \(speed\) \(mid\) &
+                \begin{minipage}{0.45\textwidth}
+                    \vspace{0.5\zh}
+                    midのパッドを基点として、\(speed\)(cm/s)で、\((x,y,z)\)の位置に移動する。
+                    \vspace{0.5\zh}
+                \end{minipage} \\ \hline
+                \begin{minipage}{0.25\textwidth}
+                    courve \(x_1\) \(y_1\) \(z_1\) \(x_2\) \(y_2\) \(z_2\) \(speed\) \(mid\) 
+                \end{minipage} &
+                \begin{minipage}{0.45\textwidth}
+                    \vspace{0.5\zh}
+                    ミッションパッド\(mid\)を基点として、座標\((x_1,y_1,z_1)\)を経由して、\((x_2,y_2,z_2)\)へ\(speed\)(cm/s)で移動する。
+                    移動経路の半径rは、\(0.5 < r < 10\)mとする。条件を満たさない場合、errorを返す。
+                    \vspace{0.5\zh}
+                \end{minipage} \\ \hline
+                \begin{minipage}{0.25\textwidth}
+                    jump \(x\) \(y\) \(z\) \(speed\) \(yaw\) \(mid_1\) \(mid_2\) 
+                \end{minipage} &
+                \begin{minipage}{0.45\textwidth}
+                    \vspace{0.5\zh}
+                    ミッションパッド\(mid_1\)より、\(mid_2\)へ、\((x,y,z)\)を経由して移動し、\(yaw^\circ\)旋回する。
+                    \vspace{0.5\zh}
+                \end{minipage} \\ \hline
+            \end{tabular}
+        \end{table}
+    \item[プロポコマンド]\mbox{}\\
+        プロポ操作のコマンド。\\
+        各動作方向のチャンネルの操作量を指定する。
+
+        \begin{table}[h]
+            \hspace{3\zw}
+            \begin{tabular}{ll}
+                \hline
+                コマンド & 動作 \\ \hline \hline
+                rc \(a\) \(b\) \(c\) \(d\) &
+                \begin{minipage}{0.45\textwidth}
+                    \vspace{0.5\zh}
+                    \begin{description}
+                        \item["a"] 左右 
+                        \item["b"] 前後
+                        \item["c"] 上下
+                        \item["d"] 旋回
+                    \end{description}
+                    \( -100 <= a,b,c,d <= 100 \)
+                    \vspace{0.5\zh}
+                \end{minipage} \\ \hline
+            \end{tabular}
+        \end{table}
+        \clearpage
+    \item[問い合わせコマンド]\mbox{} \\
+        各種問い合わせコマンド。\\
+        レスポンスは、問い合わせの結果。
+        \begin{table}[h]
+            \hspace{3\zw}
+            \begin{tabular}{lll}
+                コマンド & 動作 & レスポンス \\ \hline \hline
+                speed? & 現在の速度(cm/s) & 10-100 \\ \hline
+                battery? & バッテリーの残量 & 0-100 \\ \hline
+                time? & 今回のフライト時間 & 秒数 \\ \hline
+                wifi? & Wi-Fi電波のSNR比 & SNR値 \\ \hline
+            \end{tabular}
+        \end{table}
+\end{description}
+\clearpage
+
+
+\section {lib.rs}
+\lstinputlisting[title={lib.rs}]{src/lib.rs}
+
+\section {コントローラー}
+Telloのコントローロールを司る。
+
+
+
+\section {エラークラス}
+エラー処理クラス。ライブラリーの全てのエラーを包含する。
+\lstinputlisting[title={error.rs}]{src/error.rs}
+
+\section {ステータスモジュール}
+Telloのステータスを取得するための処理。
+\subsection {モジュールトップ}
+\lstinputlisting[title={mod.rs}]{src/status/mod.rs}
+
+\subsection {データクラス}
+ステータスデータを表すクラス。FromStrを実装し、UDPからの受信データに対して、parseが可能。
+\lstinputlisting[title={data.rs}]{src/status/data.rs}
+
+\subsection {マネージャクラス}
+UDP通信を管理し、ステータスの取得を可能とする。
+\lstinputlisting[title={manager.rs}]{src/status/manager.rs}
+
+
+\end{document}
