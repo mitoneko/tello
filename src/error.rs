@@ -1,12 +1,13 @@
+#[derive(Clone)]
 pub enum TelloError {
-    SocketError(std::io::Error),
+    SocketError(String),
     TelloCmdFail(String),
     TelloResponsIllegal(String),
 }
 
 impl From<std::io::Error> for TelloError {
     fn from(e: std::io::Error) -> Self {
-        Self::SocketError(e)
+        Self::SocketError(e.to_string())
     }
 }
 
@@ -26,3 +27,5 @@ impl std::fmt::Debug for TelloError {
         write!(f, "{}", self)
     }
 }
+
+impl std::error::Error for TelloError {}

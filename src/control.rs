@@ -5,6 +5,7 @@ use std::net::{ToSocketAddrs, UdpSocket};
 use std::num::Wrapping;
 use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 
 const TELLO_CMD_IP: &str = "192.168.10.1:8889";
 const TELLO_CMD_BIND: &str = "0.0.0.0:0";
@@ -47,18 +48,35 @@ impl Controller {
         Ok(Self {
             cmd_sender: cmd_tx,
             ret_receiver: ret_rx,
-            next_job_no: Wrapping(0u16),
+            next_job_no: Wrapping(1u16),
             job_rets: array![JobRet { id: 0, ret: Ok(0) }; JOB_RETS_SIZE],
             job_rets_cur_idx: 0,
         })
     }
 
-    fn exec_cmd(&mut self, cmd: TelloCommand) -> Result<usize, TelloError> {
-        unimplemented!()
+    pub fn exec_cmd(&mut self, cmd: TelloCommand) -> Result<u32, TelloError> {
+        let job = Job {
+            id: self.next_job_no.0,
+            cmd,
+        };
+        self.cmd_sender.send(job).expect("コマンド送信パイプエラー");
+        let mut ret_val = Err(TelloError::TelloResponsIllegal("Time out.".to_string()));
+        loop {
+            self.recv_job_ret();
+            if let Some(ret) = self.find_job_rets(self.next_job_no.0) {
+                ret_val = ret.ret.clone();
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        self.next_job_no += Wrapping(1);
+        ret_val
     }
 
-    fn recv_job_ret(&self) -> () {
-        unimplemented!()
+    fn recv_job_ret(&mut self) {
+        while let Ok(ret) = self.ret_receiver.try_recv() {
+            self.add_job_rets(ret);
+        }
     }
 
     /// 戻り値バッファにリターン値を追加する。
@@ -75,7 +93,10 @@ impl Controller {
             if self.job_rets[idx].id == id {
                 return Some(&self.job_rets[idx]);
             }
-            idx = (idx - 1) % JOB_RETS_SIZE;
+            idx = match idx {
+                0 => JOB_RETS_SIZE - 1,
+                n => n - 1,
+            }
         }
         None
     }
@@ -97,7 +118,7 @@ impl Controller {
             if let Err(e) = tello_socket.send(cmd.to_string().as_bytes()) {
                 let ret = JobRet {
                     id,
-                    ret: Err(TelloError::SocketError(e)),
+                    ret: Err(e.into()),
                 };
                 ret_send.send(ret).expect(err_send);
                 continue;
@@ -113,7 +134,7 @@ impl Controller {
                             String::from_utf8(buff[0..i].to_vec()).unwrap(),
                         ))),
                 },
-                Err(e) => Err(TelloError::SocketError(e)),
+                Err(e) => Err(e.into()),
             };
             ret_send.send(JobRet { id, ret }).expect(err_send);
         }

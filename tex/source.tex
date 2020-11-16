@@ -223,6 +223,8 @@
                 battery? & バッテリーの残量 & 0-100 \\ \hline
                 time? & 今回のフライト時間 & 秒数 \\ \hline
                 wifi? & Wi-Fi電波のSNR比 & SNR値 \\ \hline
+                sdk? & SDKバージョン番号 & バージョン \\ \hline
+                sn? & TELLOのシリアル番号 & シリアル \\ \hline
             \end{tabular}
         \end{table}
 \end{description}
@@ -234,8 +236,7 @@
 
 \section {コントローラー}
 Telloのコントローロールを司る。
-
-
+\lstinputlisting[title={control.rs}]{src/control.rs}
 
 \section {エラークラス}
 エラー処理クラス。ライブラリーの全てのエラーを包含する。
