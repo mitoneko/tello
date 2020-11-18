@@ -24,21 +24,10 @@ pub struct Controller {
 impl Controller {
     /// コントローラーを立ち上げる。
     /// # 引数
-    ///  - socket : Telloとのコマンド送受信用UDPソケット。
     ///  - tello_ip : Telloのipアドレス、及び、ポート番号。
-    ///
-    ///  ともに、Noneを指定すればデフォルト値を使用する。
-    pub fn new<U, A, A2>(socket: U, tello_ip: A) -> Result<Self, TelloError>
-    where
-        U: Into<Option<UdpSocket>>,
-        A: Into<Option<A2>>,
-        A2: ToSocketAddrs,
-    {
-        let socket = socket.into().unwrap_or(UdpSocket::bind(TELLO_CMD_BIND)?);
-        match tello_ip.into() {
-            Some(a) => socket.connect(a)?,
-            None => socket.connect(TELLO_CMD_IP)?,
-        }
+    pub fn new_with_ip(tello_ip: impl ToSocketAddrs) -> Result<Self, TelloError> {
+        let socket = UdpSocket::bind(TELLO_CMD_BIND)?;
+        socket.connect(tello_ip)?;
         let (cmd_tx, cmd_rx) = mpsc::channel();
         let (ret_tx, ret_rx) = mpsc::channel();
         thread::spawn(move || {
@@ -52,6 +41,13 @@ impl Controller {
             job_rets: array![JobRet { id: 0, ret: Ok(0) }; JOB_RETS_SIZE],
             job_rets_cur_idx: 0,
         })
+    }
+
+    /// コントローラーを立ち上げる
+    ///
+    /// Telloのipは、"192.168.10.1:8889"とする。
+    pub fn new() -> Result<Self, TelloError> {
+        Controller::new_with_ip(TELLO_CMD_IP)
     }
 
     pub fn exec_cmd(&mut self, cmd: TelloCommand) -> Result<u32, TelloError> {
