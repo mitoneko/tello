@@ -3,6 +3,7 @@ pub enum TelloError {
     SocketError(String),
     TelloCmdFail(String),
     TelloResponsIllegal(String),
+    TelloTimeout(String),
 }
 
 impl From<std::io::Error> for TelloError {
@@ -18,6 +19,7 @@ impl std::fmt::Display for TelloError {
             SocketError(e) => write!(f, "SocketError: {}", e),
             TelloCmdFail(s) => write!(f, "Tello Error: {}", s),
             TelloResponsIllegal(s) => write!(f, "Illegal Respons from tello.[{}]", s),
+            TelloTimeout(s) => write!(f, "Timeout: {}", s),
         }
     }
 }

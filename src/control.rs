@@ -19,6 +19,7 @@ pub struct Controller {
     next_job_no: Wrapping<u16>,
     job_rets: [JobRet; JOB_RETS_SIZE],
     job_rets_cur_idx: usize,
+    timeout_sec: u16,
 }
 
 impl Controller {
@@ -40,6 +41,7 @@ impl Controller {
             next_job_no: Wrapping(1u16),
             job_rets: array![JobRet { id: 0, ret: Ok(0) }; JOB_RETS_SIZE],
             job_rets_cur_idx: 0,
+            timeout_sec: 30,
         })
     }
 
@@ -50,14 +52,23 @@ impl Controller {
         Controller::new_with_ip(TELLO_CMD_IP)
     }
 
+    /// 同期実行時のTelloからのレスポンスのタイムアウト秒数の設定
+    /// デフォルトは、30秒
+    pub fn set_timeout_sec(&mut self, sec: u16) {
+        self.timeout_sec = sec;
+    }
+
     pub fn exec_cmd(&mut self, cmd: TelloCommand) -> Result<u32, TelloError> {
-        let job = Job {
-            id: self.next_job_no.0,
-            cmd,
-        };
-        self.cmd_sender.send(job).expect("コマンド送信パイプエラー");
-        let mut ret_val = Err(TelloError::TelloResponsIllegal("Time out.".to_string()));
-        loop {
+        {
+            let cmd = cmd.clone();
+            let job = Job {
+                id: self.next_job_no.0,
+                cmd,
+            };
+            self.cmd_sender.send(job).expect("コマンド送信パイプエラー");
+        }
+        let mut ret_val = Err(TelloError::TelloTimeout(format!("CMD[{}]", cmd)));
+        for _i in 0..self.timeout_sec * 10 {
             self.recv_job_ret();
             if let Some(ret) = self.find_job_rets(self.next_job_no.0) {
                 ret_val = ret.ret.clone();
@@ -149,20 +160,20 @@ struct JobRet {
     ret: Result<u32, TelloError>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TelloCommand {
     Command,
     Takeoff,
     Land,
 }
 
-impl ToString for TelloCommand {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for TelloCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use TelloCommand::*;
         match self {
-            Command => "command".to_string(),
-            Takeoff => "takeoff".to_string(),
-            Land => "land".to_string(),
+            Command => write!(f, "command"),
+            Takeoff => write!(f, "takeoff"),
+            Land => write!(f, "land"),
         }
     }
 }
