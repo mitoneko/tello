@@ -39,7 +39,7 @@ impl Controller {
             cmd_sender: cmd_tx,
             ret_receiver: ret_rx,
             next_job_no: Wrapping(1u16),
-            job_rets: array![JobRet { id: 0, ret: Ok(0) }; JOB_RETS_SIZE],
+            job_rets: array![JobRet { id: 0, ret: Ok(Ret::None) }; JOB_RETS_SIZE],
             job_rets_cur_idx: 0,
             timeout_sec: 30,
         })
@@ -58,7 +58,7 @@ impl Controller {
         self.timeout_sec = sec;
     }
 
-    pub fn exec_cmd(&mut self, cmd: TelloCommand) -> Result<u32, TelloError> {
+    pub fn exec_cmd(&mut self, cmd: TelloCommand) -> Result<Ret, TelloError> {
         {
             let cmd = cmd.clone();
             let job = Job {
@@ -132,14 +132,15 @@ impl Controller {
             }
             let ret = match tello_socket.recv(&mut buff) {
                 Ok(i) => match &buff[0..i] {
-                    b"ok" => Ok(0),
+                    b"ok" => Ok(Ret::Ok),
                     b"error" => Err(TelloError::TelloCmdFail(cmd.to_string())),
-                    _ => std::str::from_utf8(&buff[0..i])
-                        .unwrap()
-                        .parse::<u32>()
-                        .or(Err(TelloError::TelloResponsIllegal(
-                            String::from_utf8(buff[0..i].to_vec()).unwrap(),
-                        ))),
+                    _ => {
+                        let ret_str = std::str::from_utf8(&buff[0..i]).unwrap();
+                        match ret_str.parse::<u32>() {
+                            Ok(i) => Ok(Ret::U32(i)),
+                            Err(_) => Ok(Ret::Str(ret_str.to_string())),
+                        }
+                    }
                 },
                 Err(e) => Err(e.into()),
             };
@@ -157,7 +158,15 @@ struct Job {
 #[derive(Debug)]
 struct JobRet {
     id: u16,
-    ret: Result<u32, TelloError>,
+    ret: Result<Ret, TelloError>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Ret {
+    None,
+    Ok,
+    U32(u32),
+    Str(String),
 }
 
 #[derive(Debug, Clone)]
@@ -165,6 +174,8 @@ pub enum TelloCommand {
     Command,
     Takeoff,
     Land,
+    QuerySdk,
+    QuerySn,
 }
 
 impl std::fmt::Display for TelloCommand {
@@ -174,6 +185,8 @@ impl std::fmt::Display for TelloCommand {
             Command => write!(f, "command"),
             Takeoff => write!(f, "takeoff"),
             Land => write!(f, "land"),
+            QuerySdk => write!(f, "sdk?"),
+            QuerySn => write!(f, "sn?"),
         }
     }
 }
