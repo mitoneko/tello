@@ -1,4 +1,5 @@
 \documentclass[a4paper, 12pt]{ltjsarticle}
+\usepackage[pdfencoding=auto,colorlinks,linkcolor=blue,urlcolor=blue]{hyperref}
 \usepackage[top=1cm,bottom=1cm,left=2cm,right=1cm,includefoot]{geometry}
 \usepackage{listings, listings-rust}
 \lstset{
@@ -233,27 +234,32 @@
 
 \section {lib.rs}
 \lstinputlisting[title={lib.rs}]{src/lib.rs}
+\clearpage
 
 \section {コントローラー}
 Telloのコントローロールを司る。
 \lstinputlisting[title={control.rs}]{src/control.rs}
+\clearpage
 
 \section {エラークラス}
 エラー処理クラス。ライブラリーの全てのエラーを包含する。
 \lstinputlisting[title={error.rs}]{src/error.rs}
+\clearpage
 
 \section {ステータスモジュール}
 Telloのステータスを取得するための処理。
 \subsection {モジュールトップ}
 \lstinputlisting[title={mod.rs}]{src/status/mod.rs}
+\clearpage
 
 \subsection {データクラス}
 ステータスデータを表すクラス。FromStrを実装し、UDPからの受信データに対して、parseが可能。
 \lstinputlisting[title={data.rs}]{src/status/data.rs}
+\clearpage
 
 \subsection {マネージャクラス}
 UDP通信を管理し、ステータスの取得を可能とする。
 \lstinputlisting[title={manager.rs}]{src/status/manager.rs}
-
+\clearpage
 
 \end{document}
