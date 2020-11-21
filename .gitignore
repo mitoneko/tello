@@ -6,3 +6,4 @@ tex/*.log
 tex/*.dvi
 tex/*.toc
 tex/*.synctex.gz
+tex/*.out
